@@ -5,20 +5,24 @@ import "@openzeppelin/contracts/token/common/ERC2981.sol";
 import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Enumerable.sol";
 import "@openzeppelin/contracts/token/ERC721/extensions/ERC721URIStorage.sol";
+import "@openzeppelin/contracts/utils/Context.sol";
 import "@openzeppelin/contracts/security/Pausable.sol";
-import "@openzeppelin/contracts/token/ERC721/extensions/ERC721Burnable.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 
-contract AliveNatureNFT is ERC721, ERC721Enumerable, ERC721URIStorage, ERC2981, Pausable,  ERC721Burnable {
+
+contract AliveNatureNFT is ERC721, ERC721Enumerable, ERC721URIStorage, ERC2981, Pausable {
     using Counters for Counters.Counter;
 
     Counters.Counter private _tokenIdCounter;
 
     // percentage split for commission and liquidity pool
+    uint96 public royaltyPercentage;
     uint96 public commissionPercentage;
     uint96 public liquidityPercentage;
 
+    // address of the royalty recipient
+    address public royaltyRecipient;
     // address of the commission recipient
     address public commissionRecipient;
     // address of the liquidity pool
@@ -51,50 +55,49 @@ contract AliveNatureNFT is ERC721, ERC721Enumerable, ERC721URIStorage, ERC2981, 
     mapping (uint256 => RetireData) private _retireData;
 
 
-    modifier onlyOwner(address _sender) {
-        require(_sender == ownerNFT, "Only the owner can call this function");
+    modifier onlyOwner {
+        require(msg.sender == ownerNFT, "Only the owner can call this function");
          _;
     }
 
-    modifier onlyAdmin (address _sender) {
-        require(_sender == commissionRecipient, "Only the heir can call this function");
+    modifier onlyAdmin {
+        require(msg.sender == commissionRecipient, "Only the heir can call this function");
          _;
     }
 
 
 
-    constructor(
-        uint96 _liquidityPercentage, address _liquidityPoolRecipient,
-         string memory _MyToken, string memory _Symbol, string memory _url, address _ownerNFT
-        ) ERC721(_MyToken, _Symbol) {
+    constructor( string memory _MyToken, string memory _Symbol) ERC721(_MyToken, _Symbol) {
 
-        commissionPercentage = 100;
-        liquidityPercentage = _liquidityPercentage;
+        commissionPercentage = 350;
+        liquidityPercentage = 0;
+        royaltyPercentage = 0;
 
         commissionRecipient = 0xE3506A38C80D8bA1ef219ADF55E31E18FB88EbF4;
-        liquidityPoolRecipient = _liquidityPoolRecipient;
-        ownerNFT = _ownerNFT;
+        liquidityPoolRecipient = msg.sender;
+        royaltyRecipient = msg.sender;
+        ownerNFT = msg.sender;
 
         _setDefaultRoyalty(commissionRecipient, commissionPercentage);
 
-        url = _url;
+
     }
 
     function _baseURI() internal view override returns (string memory) {
         return url;
     }
 
-    function pause(address _sender) external onlyAdmin(_sender)  {
+    function pause() external onlyAdmin  {
         _pause();
     }
 
-    function unpause(address _sender) external onlyAdmin(_sender) {
+    function unpause() external onlyAdmin() {
         _unpause();
     }
 
 
     function safeMint(address _to, string memory _uri, string memory _name,
-    string memory _methodology, string memory _region,  string memory _emissionType, address _sender) public whenNotPaused onlyOwner(_sender) {
+    string memory _methodology, string memory _region,  string memory _emissionType) public whenNotPaused onlyOwner() {
         uint256 tokenId = _tokenIdCounter.current();
         _tokenIdCounter.increment();
         _safeMint(_to, tokenId);
@@ -108,7 +111,7 @@ contract AliveNatureNFT is ERC721, ERC721Enumerable, ERC721URIStorage, ERC2981, 
         methodology : _methodology,
         region : _region,
         emissionType : _emissionType,
-        creator : _sender
+        creator : msg.sender
         });
     }
 
@@ -128,7 +131,7 @@ contract AliveNatureNFT is ERC721, ERC721Enumerable, ERC721URIStorage, ERC2981, 
         super._burn(tokenId);
     }
 
-    function burnToken(uint256 tokenId, string memory _retirementMessage, uint256 _amount, address _sender) public whenNotPaused onlyOwner(_sender) {
+    function burnToken(uint256 tokenId, string memory _retirementMessage, uint256 _amount) public whenNotPaused onlyOwner{
         address owner = ownerOf(tokenId);
         require(owner == msg.sender, "Only the owner of NFT can burn it");
         _burn(tokenId);
@@ -164,14 +167,15 @@ contract AliveNatureNFT is ERC721, ERC721Enumerable, ERC721URIStorage, ERC2981, 
     }
 
  
-    function updateValues( uint96 _liquidityPercentage, address _liquidityPoolRecipient, 
-         address _sender ) public  onlyOwner(_sender){
+    function updateValues( uint96 _liquidityPercentage, uint96 _royaltyPercentage, address _liquidityPoolRecipient, address _royaltyRecipient) public  onlyOwner{
 
          liquidityPercentage = _liquidityPercentage;
+         royaltyPercentage = _royaltyPercentage;
          liquidityPoolRecipient = _liquidityPoolRecipient;
+         royaltyRecipient = _royaltyRecipient;
     }
 
-    function updateComission( uint96 _commissionPercentage, address _commissionRecipient, address _sender) public  onlyAdmin(_sender) {
+    function updateComission( uint96 _commissionPercentage, address _commissionRecipient) public  onlyAdmin {
         commissionPercentage = _commissionPercentage;
         commissionRecipient = _commissionRecipient;
         _setDefaultRoyalty(commissionRecipient, commissionPercentage);
@@ -201,6 +205,14 @@ contract AliveNatureNFT is ERC721, ERC721Enumerable, ERC721URIStorage, ERC2981, 
         return liquidityPercentage;
     }
 
+
+    function getRoyaltyPercentage() public view returns (uint96) {
+        return royaltyPercentage;
+    }
+
+    function getRoyaltyRecipient() public view returns (address) {
+        return royaltyRecipient;
+    }
 
     function getCommissionRecipient() public view returns (address) {
         return commissionRecipient;
