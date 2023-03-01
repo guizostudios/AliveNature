@@ -1,23 +1,27 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./AliveNatureNFT.sol";
+import "./AliveNatureERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
-import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
-import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/math/SafeMath.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 
-contract AliveNatureMarketplace is Pausable, Ownable, ReentrancyGuard  {
+abstract contract AliveNatureMarketplace is  AliveNatureERC721, ReentrancyGuard  {
+    IERC20 public ERC20;
+
     using Counters for Counters.Counter;
     
     Counters.Counter private numOfListing;
+
+
 
 struct NFTListing {  
   ERC721 nft;
   uint tokenId;
   uint price;
+  address coin;
   address seller;
   bool forSale;
 }
@@ -40,21 +44,22 @@ struct NFTListing {
     }
 
   
-// this function will list an artifact into the marketplace
-  function listNFT(ERC721 _nft,  uint256 _tokenId, uint256 _price) external {
+// this function will list and sell an NFT into the marketplace
+  function listNFT(ERC721 _nft,  uint256 _tokenId, uint256 _price, address _coin) external {
+    require (_ownerOf(_tokenId) == msg.sender, "You are not the owner");
     require(_price > 0, "NFTMarket: price must be greater than 0");
     numOfListing.increment();
     listings[numOfListing.current()] = NFTListing(
        _nft,
        _tokenId,
        _price,
+       _coin,
        payable(msg.sender), 
        false
        );
   }
 
 
-// this function will cancel the listing. it also has checks to make sure only the owner of the listing can cancel the listing from the market place
 function sell(uint256 _Id) external onlyNftOwner(_Id){
      NFTListing storage listing = listings[_Id];
      require(listing.seller == msg.sender, "Only the nft owner can sell nft");
@@ -63,6 +68,7 @@ function sell(uint256 _Id) external onlyNftOwner(_Id){
      listing.forSale = true;
   }
 
+// this function will cancel the listing. it also has checks to make sure only the owner of the listing can cancel the listing from the market place
 
   function cancel(uint _Id) external onlyNftOwner(_Id){
      NFTListing storage listing = listings[_Id];
@@ -75,39 +81,31 @@ function sell(uint256 _Id) external onlyNftOwner(_Id){
 
 
 // this function will facilitate the purchasing of a listing
-  function buyNFT(uint _Id, uint96 _royaltyPercentage, uint96 _liquidityPercentage, uint96 _stakingPercentage, 
-  address _royaltyRecipient,address _liquidityPoolRecipient, address _stakingRecipient) public payable whenNotPaused nonReentrant {
+  function buyNFT(uint _Id) public payable whenNotPaused nonReentrant {
         NFTListing storage listing = listings[_Id];
         require(_Id > 0 && _Id <= numOfListing.current(), "item doesn't exist");
         require(msg.value >= listing.price,"not enough balance for this transaction");
         require(listing.forSale != false, "item is not for sell");
         require(listing.seller != msg.sender, "You cannot buy your own nft");
 
-        uint256 royaltyAmount = SafeMath.mul(listing.price, _royaltyPercentage);
-        royaltyAmount = SafeMath.div(royaltyAmount, 10000);
-        uint256 liquidityAmount = SafeMath.mul(listing.price, _liquidityPercentage);
-        liquidityAmount = SafeMath.div(liquidityAmount, 10000);
-        uint256 stakingAmount = SafeMath.mul(listing.price, _stakingPercentage);
-        stakingAmount = SafeMath.div(stakingAmount, 10000);
-        uint256 price1 = SafeMath.sub(listing.price, royaltyAmount);
-        uint256 price2 = SafeMath.sub(price1, liquidityAmount);
-        uint256 finalPrice = SafeMath.sub(price2, stakingAmount);
+        uint256 comissionAmount = SafeMath.mul(listing.price, getCommissionPercentage());
+        comissionAmount = SafeMath.div(comissionAmount, 10000);
+        uint256 sellerAmount = SafeMath.sub(listing.price, comissionAmount);
 
 
-        payable(_royaltyRecipient).transfer(royaltyAmount);
-        payable(_liquidityPoolRecipient).transfer(liquidityAmount);
-        payable(_stakingRecipient).transfer(stakingAmount);
-        payable(listing.seller).transfer(finalPrice);
+        if (listing.coin == 0xF194afDf50B03e69Bd7D057c1Aa9e10c9954E4C9){
+        require(sellerAmount <= address(this).balance, "Insufficient funds.");
+        payable(listing.seller).transfer(sellerAmount);
+        } else {
+          ERC20 = IERC20(listing.coin);
+          require(sellerAmount <= ERC20.balanceOf(address(this)), "Insufficient funds.");
+          ERC20.transfer(listing.seller, sellerAmount);
 
+        }
         listing.nft.transferFrom(address(this), msg.sender, listing.tokenId);
         listing.seller = msg.sender;
         listing.forSale = false;
     }
-
-
-//        require(_isApprovedOrOwner(seller, _tokenId), "Token is not owned or approved by the seller.");
-  //      require(getApproved(_tokenId) == msg.sender, "Seller has not approved the transfer of the token.");
-
 
 
 // this function will get the listings in the market place
@@ -120,4 +118,5 @@ function sell(uint256 _Id) external onlyNftOwner(_Id){
     function getListinglength() public view returns (uint) {
         return numOfListing.current();
     }   
+
 }
