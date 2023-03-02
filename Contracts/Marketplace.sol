@@ -1,15 +1,18 @@
 // SPDX-License-Identifier: MIT
 pragma solidity ^0.8.0;
 
-import "./AliveNatureERC721.sol";
 import "@openzeppelin/contracts/utils/Counters.sol";
+import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
+import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/security/Pausable.sol";
 import "@openzeppelin/contracts/security/ReentrancyGuard.sol";
 import "@openzeppelin/contracts/utils/math/SafeMath.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 
-abstract contract AliveNatureMarketplace is  AliveNatureERC721, ReentrancyGuard  {
+contract AliveNatureMarketplace is Ownable, Pausable,  ReentrancyGuard  {
     IERC20 public ERC20;
+    IERC721 public ERCNFT;
 
     using Counters for Counters.Counter;
     
@@ -46,7 +49,7 @@ struct NFTListing {
   
 // this function will list and sell an NFT into the marketplace
   function listNFT(ERC721 _nft,  uint256 _tokenId, uint256 _price, address _coin) external {
-    require (_ownerOf(_tokenId) == msg.sender, "You are not the owner");
+    require (ERCNFT.ownerOf(_tokenId) == msg.sender, "You are not the owner");
     require(_price > 0, "NFTMarket: price must be greater than 0");
     numOfListing.increment();
     listings[numOfListing.current()] = NFTListing(
@@ -57,15 +60,10 @@ struct NFTListing {
        payable(msg.sender), 
        false
        );
-  }
+    NFTListing storage listing = listings[_tokenId];
+    listing.nft.transferFrom(msg.sender, address(this), _tokenId);
+    listing.forSale = true;
 
-
-function sell(uint256 _Id) external onlyNftOwner(_Id){
-     NFTListing storage listing = listings[_Id];
-     require(listing.seller == msg.sender, "Only the nft owner can sell nft");
-     require(listing.forSale == false);
-     listing.nft.transferFrom(msg.sender, address(this), _Id);
-     listing.forSale = true;
   }
 
 // this function will cancel the listing. it also has checks to make sure only the owner of the listing can cancel the listing from the market place
@@ -88,7 +86,7 @@ function sell(uint256 _Id) external onlyNftOwner(_Id){
         require(listing.forSale != false, "item is not for sell");
         require(listing.seller != msg.sender, "You cannot buy your own nft");
 
-        uint256 comissionAmount = SafeMath.mul(listing.price, getCommissionPercentage());
+        uint256 comissionAmount = SafeMath.mul(listing.price, 350);
         comissionAmount = SafeMath.div(comissionAmount, 10000);
         uint256 sellerAmount = SafeMath.sub(listing.price, comissionAmount);
 
