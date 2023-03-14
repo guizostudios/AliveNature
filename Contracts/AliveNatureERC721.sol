@@ -70,9 +70,8 @@ contract AliveNatureERC721 is ERC721, ERC721Enumerable, ERC721URIStorage,Ownable
 
 
     function safeMint(address _to, string memory _uri, string memory _name,
-    string memory _methodology, string memory _area, string memory _region,  string memory _emissionType) public whenNotPaused onlyOwner {
-        uint256 tokenId = _tokenIdCounter.current();
-        _tokenIdCounter.increment();
+    string memory _methodology, string memory _area, string memory _region,  string memory _emissionType, uint256 _tokenId) public whenNotPaused onlyOwner {
+        uint256 tokenId = _tokenId;
         _safeMint(_to, tokenId);
         _setTokenURI(tokenId, _uri);
         

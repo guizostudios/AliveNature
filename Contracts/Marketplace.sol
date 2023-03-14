@@ -19,7 +19,6 @@ contract AliveNatureMarketplace is Ownable, Pausable,  ReentrancyGuard  {
     Counters.Counter private numOfListing;
 
 
-
 struct NFTListing {  
   ERC721 nft;
   uint tokenId;
